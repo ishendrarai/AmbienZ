@@ -1,0 +1,389 @@
+import sys
+import os
+import json
+import time
+import socket
+import numpy as np
+import cv2
+import mss
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                               QHBoxLayout, QSlider, QLabel, QPushButton,
+                               QGroupBox, QComboBox, QFrame, QSystemTrayIcon,
+                               QMenu, QStyle)
+from PySide6.QtGui import QAction, QIcon
+from PySide6.QtCore import Qt, QThread, Signal, Slot, QEvent
+
+CONFIG_FILE = "lightwiz_config.json"
+
+
+# --- COLOR SCIENCE UTILS ---
+def to_linear(image):
+    return np.power(image / 255.0, 2.2)
+
+
+def to_srgb(linear_color):
+    return np.power(np.clip(linear_color, 0, 1), 1 / 2.2) * 255
+
+
+# --- DISCOVERY LOGIC ---
+class WizDiscovery:
+    def __init__(self, timeout=1.5):
+        self.port_send = 38899
+        self.port_recv = 38900
+        self.timeout = timeout
+
+    def scan(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.settimeout(self.timeout)
+        message = json.dumps({"method": "getSystemConfig", "params": {}})
+        bulbs = []
+        try:
+            sock.sendto(message.encode(), ('255.255.255.255', self.port_send))
+            while True:
+                data, addr = sock.recvfrom(1024)
+                resp = json.loads(data.decode())
+                if "result" in resp:
+                    bulbs.append({"ip": addr[0], "mac": resp["result"].get("mac", "Unknown")})
+        except (socket.timeout, json.JSONDecodeError):
+            pass
+        finally:
+            sock.close()
+        return bulbs
+
+
+class DiscoveryWorker(QThread):
+    finished_signal = Signal(list)
+
+    def __init__(self, discoverer):
+        super().__init__()
+        self.discoverer = discoverer
+
+    def run(self):
+        bulbs = self.discoverer.scan()
+        self.finished_signal.emit(bulbs)
+
+
+# --- CORE SYNC ENGINE ---
+class SyncWorker(QThread):
+    preview_signal = Signal(dict)
+
+    def __init__(self):
+        super().__init__()
+        self.running = False
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.params = {
+            "ip": "127.0.0.1",
+            "port": 38899,
+            "fps": 40,
+            "saturation": 1.4,
+            "smoothness": 0.6,
+            "brightness": 100,  # Added Brightness
+            "mode": "Dominant",
+            "clusters": 3,
+            "dark_threshold": 20,
+            "monitor_idx": 1
+        }
+        self.prev_rgb = np.array([0.0, 0.0, 0.0])
+
+    def crop_black_bars(self, img):
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        _, thresh = cv2.threshold(gray, self.params["dark_threshold"], 255, cv2.THRESH_BINARY)
+        coords = cv2.findNonZero(thresh)
+        if coords is not None:
+            x, y, w, h = cv2.boundingRect(coords)
+            if w > 10 and h > 10:
+                return img[y:y + h, x:x + w]
+        return img
+
+    def run(self):
+        self.running = True
+        with mss.mss() as sct:
+            while self.running:
+                start_time = time.perf_counter()
+
+                m_idx = self.params.get("monitor_idx", 1)
+                if m_idx >= len(sct.monitors): m_idx = 1
+                monitor = sct.monitors[m_idx]
+
+                img = np.array(sct.grab(monitor))
+                img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)
+                img_small = cv2.resize(img, (160, 90))
+                img_small = self.crop_black_bars(img_small)
+
+                if self.params["mode"] == "Dominant":
+                    rgb = self.extract_dominant(img_small)
+                elif self.params["mode"] == "Edge Weighted":
+                    rgb = self.extract_edge_weighted(img_small)
+                else:
+                    rgb = np.mean(img_small, axis=(0, 1))
+
+                lin_rgb = to_linear(rgb)
+                mean_lin = np.mean(lin_rgb)
+                lin_rgb = mean_lin + (lin_rgb - mean_lin) * self.params["saturation"]
+
+                smooth = self.params["smoothness"]
+                current_rgb = self.prev_rgb * smooth + lin_rgb * (1 - smooth)
+                self.prev_rgb = current_rgb
+
+                final_rgb = to_srgb(current_rgb).astype(int)
+                self.send_to_wiz(final_rgb)
+
+                self.preview_signal.emit({"rgb": tuple(final_rgb), "time": time.perf_counter() - start_time})
+
+                wait_time = (1 / self.params["fps"]) - (time.perf_counter() - start_time)
+                if wait_time > 0: time.sleep(wait_time)
+
+    def extract_dominant(self, img):
+        pixels = img.reshape(-1, 3)
+        brightness = np.sum(pixels, axis=1) / 3
+        pixels = pixels[brightness > self.params["dark_threshold"]]
+        if len(pixels) < 50: return np.array([0.0, 0.0, 0.0])
+        pixels = np.float32(pixels)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 5, 0.2)
+        _, labels, centers = cv2.kmeans(pixels, self.params["clusters"], None, criteria, 1, cv2.KMEANS_PP_CENTERS)
+        return centers[np.argmax(np.bincount(labels.flatten()))]
+
+    def extract_edge_weighted(self, img):
+        h, w, _ = img.shape
+        mask = np.ones((h, w), dtype=np.float32)
+        cv2.rectangle(mask, (int(w * 0.2), int(h * 0.2)), (int(w * 0.8), int(h * 0.8)), 0.2, -1)
+        return np.average(img, axis=(0, 1), weights=mask)
+
+    def send_to_wiz(self, rgb):
+        r, g, b = np.clip(rgb, 0, 255)
+        # Included dynamic brightness in the payload here
+        payload = {"method": "setPilot",
+                   "params": {"r": int(r), "g": int(g), "b": int(b), "dimming": int(self.params["brightness"])}}
+        try:
+            self.sock.sendto(json.dumps(payload).encode(), (self.params["ip"], self.params["port"]))
+        except Exception:
+            pass
+
+
+# --- MAIN UI ---
+class LightWizUI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("LightWiz Pro")
+        self.setMinimumWidth(550)
+        self.worker = SyncWorker()
+        self.discoverer = WizDiscovery()
+        self.discovery_thread = DiscoveryWorker(self.discoverer)
+        self.discovery_thread.finished_signal.connect(self.on_scan_finished)
+
+        central = QWidget()
+        self.setCentralWidget(central)
+        self.layout = QVBoxLayout(central)
+        self.layout.setContentsMargins(20, 20, 20, 20)
+
+        self.setup_ui()
+        self.setup_tray()
+        self.load_config()  # Load saved settings
+
+        self.worker.preview_signal.connect(self.update_ui)
+        self.setStyleSheet(self.get_theme())
+
+    def setup_ui(self):
+        dev_group = QGroupBox("1. Device Management")
+        dev_layout = QHBoxLayout(dev_group)
+        self.bulb_combo = QComboBox()
+        self.bulb_combo.setMinimumWidth(200)
+        self.btn_scan = QPushButton("🔍 Scan")
+        self.btn_scan.clicked.connect(self.scan_bulbs)
+        dev_layout.addWidget(QLabel("Bulb:"))
+        dev_layout.addWidget(self.bulb_combo)
+        dev_layout.addWidget(self.btn_scan)
+        self.layout.addWidget(dev_group)
+
+        self.preview_frame = QFrame()
+        self.preview_frame.setFixedHeight(80)
+        self.preview_frame.setObjectName("preview")
+        self.layout.addWidget(self.preview_frame)
+
+        ctrl_group = QGroupBox("2. Settings")
+        ctrl_layout = QVBoxLayout(ctrl_group)
+
+        self.monitor_combo = QComboBox()
+        with mss.mss() as sct:
+            for i in range(1, len(sct.monitors)):
+                monitor = sct.monitors[i]
+                self.monitor_combo.addItem(f"Display {i} ({monitor['width']}x{monitor['height']})", i)
+
+        self.monitor_combo.currentIndexChanged.connect(self.sync_params)
+        ctrl_layout.addWidget(QLabel("Select Monitor:"))
+        ctrl_layout.addWidget(self.monitor_combo)
+
+        # Added Brightness Slider
+        self.bright_slider = self.add_labeled_slider(ctrl_layout, "Max Brightness", 10, 100, 100)
+        self.sat_slider = self.add_labeled_slider(ctrl_layout, "Saturation Boost", 10, 30, 14)
+        self.smooth_slider = self.add_labeled_slider(ctrl_layout, "Smoothing", 0, 99, 60)
+
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(["Dominant", "Average", "Edge Weighted"])
+        self.mode_combo.currentTextChanged.connect(self.sync_params)
+        ctrl_layout.addWidget(QLabel("Extraction Mode:"))
+        ctrl_layout.addWidget(self.mode_combo)
+
+        self.layout.addWidget(ctrl_group)
+
+        self.status_label = QLabel("Ready. Select a bulb to begin.")
+        self.btn_toggle = QPushButton("START SYNC")
+        self.btn_toggle.setObjectName("startBtn")
+        self.btn_toggle.setCheckable(True)
+        self.btn_toggle.clicked.connect(self.toggle_engine)
+
+        self.layout.addWidget(self.status_label)
+        self.layout.addWidget(self.btn_toggle)
+
+    def setup_tray(self):
+        self.tray_icon = QSystemTrayIcon(self)
+        # Fallback icon using built-in PySide6 standard icons
+        icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+        self.tray_icon.setIcon(icon)
+
+        tray_menu = QMenu()
+        show_action = QAction("Show Settings", self)
+        show_action.triggered.connect(self.showNormal)
+        quit_action = QAction("Quit LightWiz", self)
+        quit_action.triggered.connect(QApplication.instance().quit)
+
+        tray_menu.addAction(show_action)
+        tray_menu.addAction(quit_action)
+
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.activated.connect(self.tray_activated)
+        self.tray_icon.show()
+
+    def tray_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self.showNormal()
+
+    # Override minimize to hide to tray instead
+    def changeEvent(self, event):
+        if event.type() == QEvent.Type.WindowStateChange:
+            if self.windowState() & Qt.WindowState.WindowMinimized:
+                event.ignore()
+                self.hide()
+                self.tray_icon.showMessage("LightWiz Pro", "Running in background.",
+                                           QSystemTrayIcon.MessageIcon.Information, 2000)
+                return
+        super().changeEvent(event)
+
+    # Save configuration when app is closed entirely
+    def closeEvent(self, event):
+        self.save_config()
+        self.worker.running = False
+        self.worker.wait()
+        event.accept()
+
+    def add_labeled_slider(self, layout, name, mn, mx, val):
+        # Adjusted label display to handle the 1-100 scale for brightness vs 0.1-3.0 for others
+        is_percent = (mx == 100 and mn == 10)
+        lbl_text = f"{name}: {val if is_percent else (val / 10 if mx == 30 else val / 100)}"
+        lbl = QLabel(lbl_text)
+        slider = QSlider(Qt.Horizontal)
+        slider.setRange(mn, mx)
+        slider.setValue(val)
+
+        def on_change(v):
+            lbl.setText(f"{name}: {v if is_percent else (v / 10 if mx == 30 else v / 100)}")
+            self.sync_params()
+
+        slider.valueChanged.connect(on_change)
+        layout.addWidget(lbl)
+        layout.addWidget(slider)
+        return slider
+
+    def scan_bulbs(self):
+        self.btn_scan.setEnabled(False)
+        self.status_label.setText("Scanning network... (Background)")
+        self.discovery_thread.start()
+
+    @Slot(list)
+    def on_scan_finished(self, bulbs):
+        self.btn_scan.setEnabled(True)
+        self.bulb_combo.clear()
+        for b in bulbs:
+            self.bulb_combo.addItem(f"{b['ip']} ({b['mac']})", b['ip'])
+        self.status_label.setText(f"Scan complete. Found {len(bulbs)} bulbs.")
+        self.sync_params()
+
+    def load_config(self):
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r") as f:
+                    config = json.load(f)
+                if config.get("bulb_ip"):
+                    self.bulb_combo.addItem(f"Saved: {config['bulb_ip']}", config['bulb_ip'])
+                if config.get("monitor_idx") is not None:
+                    idx = self.monitor_combo.findData(config["monitor_idx"])
+                    if idx >= 0: self.monitor_combo.setCurrentIndex(idx)
+                if config.get("brightness"): self.bright_slider.setValue(config["brightness"])
+                if config.get("saturation"): self.sat_slider.setValue(config["saturation"])
+                if config.get("smoothness"): self.smooth_slider.setValue(config["smoothness"])
+                if config.get("mode"): self.mode_combo.setCurrentText(config["mode"])
+            except Exception as e:
+                print("Failed to load config:", e)
+
+    def save_config(self):
+        config = {
+            "bulb_ip": self.bulb_combo.currentData(),
+            "monitor_idx": self.monitor_combo.currentData(),
+            "brightness": self.bright_slider.value(),
+            "saturation": self.sat_slider.value(),
+            "smoothness": self.smooth_slider.value(),
+            "mode": self.mode_combo.currentText()
+        }
+        try:
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(config, f)
+        except Exception as e:
+            print("Failed to save config:", e)
+
+    def sync_params(self):
+        monitor_data = self.monitor_combo.currentData()
+        self.worker.params.update({
+            "ip": self.bulb_combo.currentData() or "127.0.0.1",
+            "brightness": self.bright_slider.value(),
+            "saturation": self.sat_slider.value() / 10.0,
+            "smoothness": self.smooth_slider.value() / 100.0,
+            "mode": self.mode_combo.currentText(),
+            "monitor_idx": monitor_data if monitor_data is not None else 1
+        })
+
+    def toggle_engine(self):
+        if self.btn_toggle.isChecked():
+            if not self.bulb_combo.currentData():
+                self.btn_toggle.setChecked(False)
+                self.status_label.setText("Error: No bulb selected!")
+                return
+            self.sync_params()
+            self.worker.start()
+            self.btn_toggle.setText("STOP SYNC")
+        else:
+            self.worker.running = False
+            self.btn_toggle.setText("START SYNC")
+
+    @Slot(dict)
+    def update_ui(self, data):
+        self.preview_frame.setStyleSheet(f"background-color: rgb{data['rgb']}; border-radius: 8px;")
+        self.status_label.setText(f"Active | RGB: {data['rgb']} | Frame: {data['time'] * 1000:.1f}ms")
+
+    def get_theme(self):
+        return """
+            QMainWindow { background-color: #0f0f0f; }
+            QGroupBox { color: #aaa; border: 1px solid #222; margin-top: 15px; padding: 15px; font-weight: bold; }
+            QLabel { color: #eee; font-size: 13px; }
+            #preview { border: 2px solid #333; background-color: #000; }
+            #startBtn { background-color: #0078d4; color: white; padding: 12px; font-weight: bold; border-radius: 4px; }
+            #startBtn:checked { background-color: #d83b01; }
+            QComboBox { background: #1a1a1a; color: white; border: 1px solid #333; padding: 4px; }
+        """
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = LightWizUI()
+    window.show()
+    sys.exit(app.exec())
