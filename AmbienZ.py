@@ -7,16 +7,13 @@ import numpy as np
 import cv2
 import mss
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                               QSlider, QLabel, QPushButton,
+                               QSlider, QLabel, QPushButton, QLineEdit,
                                QGroupBox, QComboBox, QFrame, QSystemTrayIcon,
                                QMenu, QStyle)
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt, QThread, Signal, Slot, QEvent
 
 CONFIG_FILE = "lightwiz_config.json"
-
-# ---> SET YOUR BULB IP HERE <---
-BULB_IP = "192.168.0.100"
 BULB_PORT = 38899
 
 
@@ -38,6 +35,7 @@ class SyncWorker(QThread):
         self.running = False
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.params = {
+            "bulb_ip": "192.168.0.100", # Default IP
             "fps": 40,
             "saturation": 1.4,
             "smoothness": 0.6,
@@ -118,7 +116,8 @@ class SyncWorker(QThread):
         payload = {"method": "setPilot",
                    "params": {"r": int(r), "g": int(g), "b": int(b), "dimming": int(self.params["brightness"])}}
         try:
-            self.sock.sendto(json.dumps(payload).encode(), (BULB_IP, BULB_PORT))
+            # Use the dynamic IP from self.params instead of the global constant
+            self.sock.sendto(json.dumps(payload).encode(), (self.params["bulb_ip"], BULB_PORT))
         except Exception:
             pass
 
@@ -153,6 +152,14 @@ class LightWizUI(QMainWindow):
         # Control Group
         ctrl_group = QGroupBox("Settings")
         ctrl_layout = QVBoxLayout(ctrl_group)
+        
+        # IP Input Box
+        self.ip_input = QLineEdit()
+        self.ip_input.setPlaceholderText("e.g. 192.168.0.100")
+        self.ip_input.setText("192.168.0.100") # Default value
+        self.ip_input.textChanged.connect(self.sync_params)
+        ctrl_layout.addWidget(QLabel("Bulb IP Address:"))
+        ctrl_layout.addWidget(self.ip_input)
 
         self.monitor_combo = QComboBox()
         with mss.mss() as sct:
@@ -177,7 +184,7 @@ class LightWizUI(QMainWindow):
         self.layout.addWidget(ctrl_group)
 
         # Footer
-        self.status_label = QLabel(f"Ready. Target IP: {BULB_IP}")
+        self.status_label = QLabel(f"Ready. Target IP: {self.ip_input.text()}")
         self.btn_toggle = QPushButton("START SYNC")
         self.btn_toggle.setObjectName("startBtn")
         self.btn_toggle.setCheckable(True)
@@ -246,6 +253,7 @@ class LightWizUI(QMainWindow):
             try:
                 with open(CONFIG_FILE, "r") as f:
                     config = json.load(f)
+                if config.get("bulb_ip"): self.ip_input.setText(config["bulb_ip"])
                 if config.get("monitor_idx") is not None:
                     idx = self.monitor_combo.findData(config["monitor_idx"])
                     if idx >= 0: self.monitor_combo.setCurrentIndex(idx)
@@ -258,6 +266,7 @@ class LightWizUI(QMainWindow):
 
     def save_config(self):
         config = {
+            "bulb_ip": self.ip_input.text().strip(),
             "monitor_idx": self.monitor_combo.currentData(),
             "brightness": self.bright_slider.value(),
             "saturation": self.sat_slider.value(),
@@ -272,13 +281,20 @@ class LightWizUI(QMainWindow):
 
     def sync_params(self):
         monitor_data = self.monitor_combo.currentData()
+        current_ip = self.ip_input.text().strip()
+        
         self.worker.params.update({
+            "bulb_ip": current_ip,
             "brightness": self.bright_slider.value(),
             "saturation": self.sat_slider.value() / 10.0,
             "smoothness": self.smooth_slider.value() / 100.0,
             "mode": self.mode_combo.currentText(),
             "monitor_idx": monitor_data if monitor_data is not None else 1
         })
+        
+        # Only update status label if not actively running so it doesn't fight the preview updates
+        if not self.btn_toggle.isChecked():
+            self.status_label.setText(f"Ready. Target IP: {current_ip}")
 
     def toggle_engine(self):
         if self.btn_toggle.isChecked():
@@ -288,17 +304,20 @@ class LightWizUI(QMainWindow):
         else:
             self.worker.running = False
             self.btn_toggle.setText("START SYNC")
+            self.status_label.setText(f"Ready. Target IP: {self.ip_input.text().strip()}")
 
     @Slot(dict)
     def update_ui(self, data):
         self.preview_frame.setStyleSheet(f"background-color: rgb{data['rgb']}; border-radius: 8px;")
-        self.status_label.setText(f"Active | RGB: {data['rgb']} | Frame: {data['time'] * 1000:.1f}ms")
+        self.status_label.setText(f"Active [{self.ip_input.text().strip()}] | RGB: {data['rgb']} | Frame: {data['time'] * 1000:.1f}ms")
 
     def get_theme(self):
         return """
             QMainWindow { background-color: #0f0f0f; }
             QGroupBox { color: #aaa; border: 1px solid #222; margin-top: 15px; padding: 15px; font-weight: bold; }
             QLabel { color: #eee; font-size: 13px; }
+            QLineEdit { background: #1a1a1a; color: white; border: 1px solid #333; padding: 6px; border-radius: 3px; }
+            QLineEdit:focus { border: 1px solid #0078d4; }
             #preview { border: 2px solid #333; background-color: #000; }
             #startBtn { background-color: #0078d4; color: white; padding: 12px; font-weight: bold; border-radius: 4px; }
             #startBtn:checked { background-color: #d83b01; }
