@@ -16,7 +16,7 @@
 ---
 
 <div align="center">
-  <img src="images/AmbienZ_UI.png" alt="My Image">
+  <img src="images/AmbienZ_UI.png" width="400" heigh-"500" alt="My Image">
 </div>
 
 <hr>
