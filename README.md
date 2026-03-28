@@ -4,8 +4,6 @@
 
 ### Real-Time Screen-to-WiZ Ambient Lighting Sync
 
-</div>
-
 **A sleek desktop app that captures your screen colors and syncs them live to WiZ smart bulbs over your local network — no cloud, no account, zero latency.**
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -15,9 +13,13 @@
 
 [Features](#-features) · [Requirements](#-requirements) · [Installation](#-installation) · [Usage](#-usage) · [Configuration](#-configuration) · [Troubleshooting](#-troubleshooting)
 
+
+
 ---
 
 ![AmbienZ UI](images/AmbienZ_UI.png)
+
+</div>
 
 ---
 
