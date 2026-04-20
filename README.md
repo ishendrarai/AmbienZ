@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/GUI-PySide6-41cd52?style=flat-square&logo=qt&logoColor=white)](https://doc.qt.io/qtforpython/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)]()
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)]()\
 
 [Features](#-features) · [Requirements](#-requirements) · [Installation](#-installation) · [Usage](#-usage) · [Configuration](#-configuration) · [Troubleshooting](#-troubleshooting)
 
@@ -25,19 +25,20 @@
 
 ## ✨ Features
 
-| Feature                      | Description                                                               |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| 🎨 **3 Color Algorithms**    | Histogram Dominant, Average, and Edge-Weighted color extraction           |
-| 🌊 **Adaptive Smoothing**    | Configurable exponential smoothing to prevent jarring flicker             |
-| 💡 **Multi-Bulb Sync**       | Add multiple WiZ bulb IPs — all receive the same color simultaneously     |
-| 🎮 **Adjustable FPS**        | Slider to control capture rate from 10 to 60 FPS                         |
-| 🎛️ **Gamma Correction**      | Per-session gamma slider (0.8–2.2) for accurate perceptual brightness     |
-| ⚡ **Frame-Skip Optimisation**| Skips UDP sends when color change is below threshold — reduces flicker    |
-| 🖥️ **Dark Modern UI**        | PySide6 GUI with live color preview, status dot, and real-time RGB readout|
-| 🖥️ **Multi-Monitor**         | Select which display to capture from a dropdown                           |
-| 💡 **Brightness Control**    | Adjustable max brightness sent directly to the bulb                       |
-| 🔔 **System Tray**           | Minimize to tray and run silently in the background                       |
-| 💾 **Config Persistence**    | All settings auto-saved/loaded from `ambienz_config.json`                 |
+| Feature                          | Description                                                                        |
+| -------------------------------- | ---------------------------------------------------------------------------------- |
+| 🎨 **3 Color Algorithms**        | Histogram Dominant, Average, and Edge-Weighted color extraction                    |
+| 🌊 **Adaptive Smoothing**        | Configurable exponential smoothing to prevent jarring flicker                      |
+| 💡 **Multi-Bulb Sync**           | Add multiple WiZ bulb IPs — all receive the same color simultaneously              |
+| 🎮 **Adjustable FPS**            | Slider to control capture rate from 10 to 60 FPS                                  |
+| 🎛️ **Gamma Correction**          | Per-session gamma slider (0.8–2.2) for accurate perceptual brightness              |
+| 🌡️ **Color Temperature**         | Kelvin slider (1 000–20 000 K) adjusts the white-point in linear RGB space        |
+| ⚡ **Frame-Skip Optimisation**   | Skips UDP sends when color change is below threshold — reduces flicker             |
+| 🖥️ **Dark Modern UI**            | PySide6 GUI with live color preview, status dot, and real-time RGB readout         |
+| 🖥️ **Multi-Monitor**             | Select which display to capture from a dropdown                                    |
+| 💡 **Brightness Control**        | Adjustable max brightness sent directly to the bulb                                |
+| 🔔 **System Tray**               | Minimize to tray and run silently in the background                                |
+| 💾 **Config Persistence**        | All settings auto-saved/loaded from `ambienz_config.json`                          |
 
 ---
 
@@ -67,7 +68,7 @@ pip install PySide6 mss opencv-python numpy
 ### 3. Run
 
 ```bash
-python ambienz.py
+python AmbienZ.py
 ```
 
 ---
@@ -78,22 +79,23 @@ python ambienz.py
 
 1. **Add your bulb(s)** — Type the IP address of each WiZ bulb into the **Bulbs** field and click **+ Add** (e.g. `192.168.0.100`). Repeat for every bulb you want to sync.
 2. **Select your monitor** — Pick the display you want to capture from the dropdown.
-3. **Tune your settings** — Adjust FPS, brightness, saturation, gamma, smoothing, and extraction mode.
+3. **Tune your settings** — Adjust FPS, brightness, saturation, gamma, color temperature, smoothing, and extraction mode.
 4. **Click START SYNC** — All bulbs will immediately begin mirroring your screen.
 
 ### Controls overview
 
-| Control               | What it does                                                                |
-| --------------------- | --------------------------------------------------------------------------- |
-| **Bulbs list**        | Add or remove WiZ bulb IPs. All listed bulbs receive every color update.    |
-| **Select Monitor**    | Choose which display to capture (all connected monitors listed)             |
-| **FPS**               | Sets how many frames per second the sync loop targets (10–60)               |
-| **Max Brightness**    | Sets the `dimming` value sent to the bulb (10–100%)                         |
-| **Saturation Boost**  | Multiplies color saturation for more vivid output (1.0–3.0×)                |
-| **Gamma**             | Gamma correction exponent applied in linear RGB space (0.8–2.2)             |
-| **Smoothing**         | Controls temporal smoothing between frames (0 = instant, 0.99 = very slow)  |
-| **Extraction Mode**   | Algorithm used to pick the screen color                                     |
-| **START / STOP SYNC** | Toggle the live sync loop on or off                                         |
+| Control               | What it does                                                                           |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| **Bulbs list**        | Add or remove WiZ bulb IPs. All listed bulbs receive every color update.               |
+| **Select Monitor**    | Choose which display to capture (all connected monitors listed)                        |
+| **FPS**               | Sets how many frames per second the sync loop targets (10–60)                          |
+| **Max Brightness**    | Sets the `dimming` value sent to the bulb (10–100%)                                    |
+| **Saturation Boost**  | Multiplies color saturation for more vivid output (1.0–3.0×)                           |
+| **Gamma**             | Gamma correction exponent applied in linear RGB space (0.8–2.2)                        |
+| **Color Temp**        | White-point adjustment in Kelvin (1 000 K = warm amber · 6 500 K = neutral · 20 000 K = cool blue) |
+| **Smoothing**         | Controls temporal smoothing between frames (0 = instant, 0.99 = very slow)             |
+| **Extraction Mode**   | Algorithm used to pick the screen color                                                |
+| **START / STOP SYNC** | Toggle the live sync loop on or off                                                    |
 
 ---
 
@@ -115,18 +117,35 @@ Weights pixels near the edges and borders of the screen more heavily. Great for 
 
 ## ⚙️ Configuration
 
-Settings are auto-saved to `ambienz_config.json` next to `ambienz.py` whenever the app closes, and loaded automatically on next launch.
+Settings are auto-saved to `ambienz_config.json` next to `AmbienZ.py` whenever the app closes, and loaded automatically on next launch.
 
-| Key           | Description                                                             |
-| ------------- | ----------------------------------------------------------------------- |
-| `bulb_ips`    | List of WiZ bulb IP addresses                                           |
-| `fps`         | Target capture framerate (10–60)                                        |
-| `monitor_idx` | Index of the monitor to capture (1 = primary)                           |
-| `brightness`  | Max brightness value sent to bulb (10–100)                              |
-| `saturation`  | Saturation multiplier (stored as slider integer, divided by 10 on use)  |
-| `smoothness`  | Smoothing factor (stored as 0–99, divided by 100 on use)                |
-| `gamma`       | Gamma exponent (stored as slider integer, divided by 10 on use)         |
-| `mode`        | Extraction algorithm: `Dominant`, `Average`, or `Edge Weighted`         |
+| Key           | Description                                                                            |
+| ------------- | -------------------------------------------------------------------------------------- |
+| `bulb_ips`    | List of WiZ bulb IP addresses                                                          |
+| `fps`         | Target capture framerate (10–60)                                                       |
+| `monitor_idx` | Index of the monitor to capture (1 = primary)                                          |
+| `brightness`  | Max brightness value sent to bulb (10–100)                                             |
+| `saturation`  | Saturation multiplier (stored as slider integer, divided by 10 on use)                 |
+| `smoothness`  | Smoothing factor (stored as 0–99, divided by 100 on use)                               |
+| `gamma`       | Gamma exponent (stored as slider integer, divided by 10 on use)                        |
+| `kelvin`      | Color temperature in Kelvin (1 000–20 000). Stored and used as-is. Default: 6 500 K   |
+| `mode`        | Extraction algorithm: `Dominant`, `Average`, or `Edge Weighted`                        |
+
+### Example `ambienz_config.json`
+
+```json
+{
+  "bulb_ips": ["192.168.0.100"],
+  "monitor_idx": 1,
+  "fps": 40,
+  "brightness": 100,
+  "saturation": 14,
+  "smoothness": 60,
+  "gamma": 10,
+  "kelvin": 6500,
+  "mode": "Dominant"
+}
+```
 
 ---
 
@@ -156,6 +175,10 @@ Gamma correction          (user-adjustable exponent, 0.8–2.2)
 Saturation boost          (scaled in linear RGB space)
       │
       ▼
+Color temperature         (Kelvin white-point via Tanner Helland piecewise fit,
+                           normalised to D65 / 6 500 K, applied in linear light)
+      │
+      ▼
 Exponential smoothing     (blends current frame with previous)
       │
       ▼
@@ -166,6 +189,14 @@ UDP → WiZ Bulb(s)         (setPilot JSON over port 38899, all IPs)
 ```
 
 The WiZ protocol is a simple JSON-over-UDP API on port `38899`. No cloud required.
+
+### Color Temperature module (`color_temperature.py`)
+
+The standalone `color_temperature.py` module provides the white-point math:
+
+- **`kelvin_to_multipliers(kelvin)`** — returns `(r_mul, g_mul, b_mul)` normalised to 1.0 at 6 500 K (D65). Used directly by the sync loop.
+- **`adjust_color_temperature(image, kelvin)`** — full image adjustment pipeline with gamma encode/decode. Useful for batch processing.
+- **`build_kelvin_lut()`** / **`lut_lookup()`** — pre-computed LUT with linear interpolation for tight loops.
 
 ---
 
@@ -180,17 +211,19 @@ Minimizing the window hides AmbienZ to the system tray — sync continues runnin
 
 ## 🛠️ Troubleshooting
 
-| Problem                 | Solution                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------ |
-| Bulb not responding     | Confirm the bulb and PC are on the same Wi-Fi network and the IP is correct    |
-| Wrong IP entered        | Find the correct IP using the WiZ app or your router's device list (see below) |
-| High CPU usage          | Switch to **Average** mode, or lower the **FPS** slider                        |
-| Colors feel washed out  | Increase **Saturation Boost** (try 2.0–2.5)                                    |
-| Too much flickering     | Increase **Smoothing** toward 0.9                                              |
-| Slow / laggy response   | Lower **Smoothing** to 0.2–0.4, or raise **FPS**                               |
-| Colors too dark/bright  | Adjust the **Gamma** slider — lower values brighten, higher values darken      |
-| Monitor not listed      | Reconnect the display and restart the app                                      |
-| Settings not saved      | Ensure the app is closed normally (not force-quit)                             |
+| Problem                     | Solution                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| Bulb not responding         | Confirm the bulb and PC are on the same Wi-Fi network and the IP is correct    |
+| Wrong IP entered            | Find the correct IP using the WiZ app or your router's device list (see below) |
+| High CPU usage              | Switch to **Average** mode, or lower the **FPS** slider                        |
+| Colors feel washed out      | Increase **Saturation Boost** (try 2.0–2.5×)                                   |
+| Too much flickering         | Increase **Smoothing** toward 0.9                                              |
+| Slow / laggy response       | Lower **Smoothing** to 0.2–0.4, or raise **FPS**                               |
+| Colors too dark/bright      | Adjust the **Gamma** slider — lower values brighten, higher values darken      |
+| Bulb looks too warm/cool    | Use the **Color Temp** slider — 6 500 K is neutral daylight; decrease for warmer amber tones, increase for cooler blue tones |
+| Monitor not listed          | Reconnect the display and restart the app                                      |
+| Settings not saved          | Ensure the app is closed normally (not force-quit)                             |
+| `color_temperature` import error | Ensure `color_temperature.py` is in the same folder as `AmbienZ.py`      |
 
 ---
 
@@ -275,7 +308,6 @@ Contributions are welcome!
 
 - [ ] Kalman filter for temporal stabilization
 - [ ] Scene presets (Movie / Gaming / Music / Ambient)
-- [ ] Color temperature (Kelvin) white-point adjustment
 - [ ] Custom screen region selector (drag-to-select)
 - [ ] Audio reactive mode (mic input → color)
 - [ ] Explicit bulb off-command when screen goes dark
@@ -295,6 +327,7 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 - [mss](https://github.com/BoboTiG/python-mss) — Fast cross-platform screen capture
 - [OpenCV](https://opencv.org/) — Image processing
 - [PySide6 / Qt](https://doc.qt.io/qtforpython/) — GUI framework
+- [Tanner Helland](https://tannerhelland.com/2012/09/18/convert-temperature-rgb-algorithm-code.html) — Kelvin → RGB piecewise approximation
 
 ---
 

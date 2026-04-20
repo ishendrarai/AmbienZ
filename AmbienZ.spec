@@ -5,8 +5,11 @@ a = Analysis(
     ['AmbienZ.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=[
+        ('color_temperature.py', '.'),
+        ('Movie.ico', '.'),
+    ],
+    hiddenimports=['color_temperature'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

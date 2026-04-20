@@ -1,1 +1,11 @@
-{"bulb_ip": "192.168.0.100", "monitor_idx": 1, "brightness": 100, "saturation": 20, "smoothness": 29, "mode": "Average"}
+{
+  "bulb_ips": ["192.168.0.100"],
+  "monitor_idx": 1,
+  "fps": 40,
+  "brightness": 100,
+  "saturation": 14,
+  "smoothness": 60,
+  "gamma": 10,
+  "kelvin": 6500,
+  "mode": "Dominant"
+}

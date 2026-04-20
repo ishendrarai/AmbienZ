@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM  AmbieZ — One-click EXE builder for Windows
+REM  AmbienZ — One-click EXE builder for Windows
 REM  Run this script in the same folder as AmbienZ.py
 REM ============================================================
 
